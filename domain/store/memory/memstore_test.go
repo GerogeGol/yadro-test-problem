@@ -56,7 +56,7 @@ func TestUpdateClientTable(t *testing.T) {
 		m := memstore.NewStore()
 
 		err := m.UpdateClientTable(dummyClient, dummyTableNumber)
-		test.AssertError(t, err, store.ClientUnknown)
+		test.AssertError(t, err, store.ClientDoesNotExist)
 	})
 }
 
@@ -78,7 +78,7 @@ func TestUpdateClientPlayingSince(t *testing.T) {
 		m := memstore.NewStore()
 
 		err := m.UpdateClientPlayingSince(dummyClient, dummyDayTime)
-		test.AssertError(t, err, store.ClientUnknown)
+		test.AssertError(t, err, store.ClientDoesNotExist)
 	})
 }
 

@@ -1,179 +1,66 @@
 package service
 
 import (
-	"errors"
 	"fmt"
 
-	"github.com/GerogeGol/yadro-test-problem/domain/queue"
-	"github.com/GerogeGol/yadro-test-problem/domain/store"
+	"github.com/GerogeGol/yadro-test-problem/domain/service/event"
 )
 
-var YouShallNotPass = errors.New("YouShallNotPass")
-var NotOpenYet = errors.New("NotOpenYet")
-var PlaceIsBusy = errors.New("PlaceIsBusy")
-var ClientUnknown = errors.New("ClientUnknown")
-var ICanWaitNoLonger = errors.New("ICanWaitNoLonger!")
-
-type ComputerClub struct {
-	ComputerCount int
-	MoneyPerHour  float64
-	busyComputers int
-	openTime      store.DayTime
-	store         store.Store
-	queue         queue.Queue
+type Service struct {
+	cc *ComputerClub
 }
 
-func NewComputerClub(computerCount int, moneyPerHour float64, openTime store.DayTime, store store.Store, queue queue.Queue) *ComputerClub {
-	return &ComputerClub{
-		ComputerCount: computerCount,
-		openTime:      openTime,
-		store:         store,
-		queue:         queue,
-	}
+func NewService(cc *ComputerClub) *Service {
+	return &Service{cc: cc}
 }
 
-func (cc *ComputerClub) Arrive(t store.DayTime, client string) error {
-	if t.Compare(cc.openTime.Time) == -1 {
-		return NotOpenYet
+func (s *Service) ServeEvent(e event.InputEvent) event.Event {
+	switch e.Id() {
+	case event.ArrivalEventId:
+		err := s.cc.Arrive(e.Time(), e.Client())
+		if err != nil {
+			return event.NewErrorEvent(e.Time(), err)
+		}
+	case event.SitDownEventId:
+		sitDownEvent, ok := e.(*event.SitDownEvent)
+		if !ok {
+			return event.NewErrorEvent(e.Time(), fmt.Errorf("Service.ServeEvent: cant interpret event to SitDownEvent"))
+		}
+
+		err := s.cc.SitDown(sitDownEvent.Time(), sitDownEvent.Client(), sitDownEvent.Table())
+		if err != nil {
+			return event.NewErrorEvent(e.Time(), err)
+		}
+
+		return event.NewOutSitDownEvent(sitDownEvent.Time(), sitDownEvent.Client(), sitDownEvent.Table())
+	case event.WaitEventId:
+		waitEvent, ok := e.(*event.WaitEvent)
+		if !ok {
+			return event.NewErrorEvent(e.Time(), fmt.Errorf("Service.ServeEvent: cant interpret event to WaitEvent"))
+		}
+
+		isWaiting, err := s.cc.Wait(waitEvent.Time(), waitEvent.Client())
+		if err != nil {
+			return event.NewErrorEvent(e.Time(), err)
+		}
+
+		if !isWaiting {
+			return event.NewOutLeaveEvent(waitEvent.Time(), waitEvent.Client())
+		}
+	case event.LeaveEventId:
+		leaveEvent, ok := e.(*event.LeaveEvent)
+		if !ok {
+			return event.NewErrorEvent(e.Time(), fmt.Errorf("Service.ServeEvent: cant interpret event to LeaveEvent"))
+		}
+
+		client, occupied, err := s.cc.Leave(leaveEvent.Time(), leaveEvent.Client())
+		if err != nil {
+			return event.NewErrorEvent(e.Time(), err)
+		}
+
+		if occupied {
+			return event.NewOutSitDownEvent(e.Time(), client.Name, client.Table)
+		}
 	}
-
-	exists, err := cc.store.IsClientExists(client)
-	if err != nil {
-		return fmt.Errorf("ComputerClub.Arrive: %w", err)
-	}
-
-	if exists {
-		return YouShallNotPass
-	}
-
-	cc.store.AddClient(client)
-	return nil
-}
-
-func (cc *ComputerClub) SitDown(t store.DayTime, clientName string, tableNumber int) error {
-	exists, err := cc.store.IsClientExists(clientName)
-	if err != nil {
-		return fmt.Errorf("ComputerClub.SitDown: %w", err)
-	}
-	if !exists {
-		return ClientUnknown
-	}
-
-	isBusy, err := cc.store.IsTableBusy(tableNumber)
-	if err != nil {
-		return fmt.Errorf("ComputerClub.SitDown: %w", err)
-	}
-
-	if isBusy {
-		return PlaceIsBusy
-	}
-
-	client, err := cc.store.Client(clientName)
-	if err != nil {
-		return fmt.Errorf("ComputerClub.SitDown: %w", err)
-	}
-
-	if client.Table == 0 {
-		cc.setClientTable(t, clientName, tableNumber)
-
-	} else {
-		cc.changeClientTable(t, clientName, tableNumber)
-	}
-	return nil
-}
-
-func (cc *ComputerClub) Wait(t store.DayTime, clientName string) (bool, error) {
-	if cc.queue.Len() >= cc.ComputerCount {
-		return false, nil
-	}
-
-	if cc.busyComputers < cc.ComputerCount {
-		return false, ICanWaitNoLonger
-	}
-
-	cc.queue.Push(clientName)
-	return true, nil
-}
-
-func (cc *ComputerClub) Leave(t store.DayTime, clientName string) (int, error) {
-	exists, err := cc.store.IsClientExists(clientName)
-	if err != nil {
-		return 0, fmt.Errorf("ComputerClub.SitDown: %w", err)
-	}
-	if !exists {
-		return 0, ClientUnknown
-	}
-
-	client, err := cc.store.Client(clientName)
-	if err != nil {
-		return 0, err
-	}
-
-	if err := cc.clientLeave(t, client); err != nil {
-		return 0, err
-	}
-	cc.busyComputers--
-
-	return client.Table, nil
-}
-
-func (cc *ComputerClub) setClientTable(t store.DayTime, clientName string, tableNumber int) error {
-	if err := cc.store.UpdateClientTable(clientName, tableNumber); err != nil {
-		return err
-	}
-
-	if err := cc.store.UpdateClientPlayingSince(clientName, t); err != nil {
-		return err
-	}
-
-	if err := cc.store.UpdateTableBusy(tableNumber, true); err != nil {
-		return err
-	}
-
-	cc.busyComputers++
-	return nil
-}
-
-func (cc *ComputerClub) changeClientTable(t store.DayTime, clientName string, tableNumber int) error {
-	client, err := cc.store.Client(clientName)
-	if err != nil {
-		return err
-	}
-
-	if err = cc.store.UpdateTableBusy(client.Table, false); err != nil {
-		return err
-	}
-
-	if err = cc.store.UpdateClientTable(clientName, tableNumber); err != nil {
-		return err
-	}
-
-	if err = cc.store.UpdateTableBusy(tableNumber, true); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (cc *ComputerClub) clientLeave(t store.DayTime, client store.Client) error {
-	if err := cc.store.RemoveClient(client.Name); err != nil {
-		return err
-	}
-
-	table, err := cc.store.Table(client.Table)
-	if err != nil {
-		return err
-	}
-
-	playingTime := client.PlayingTime(t)
-	payment := client.Payment(t, cc.MoneyPerHour)
-
-	if err = cc.store.UpdateTableWorkingTime(client.Table, table.WorkingTime+playingTime); err != nil {
-		return err
-	}
-	if err = cc.store.UpdateTableProfit(client.Table, table.Profit+payment); err != nil {
-		return err
-	}
-	return err
-
+	return event.EmptyEvent
 }

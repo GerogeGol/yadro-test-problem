@@ -36,7 +36,7 @@ func (m *MemoryStore) IsClientExists(clientName string) (bool, error) {
 
 func (m *MemoryStore) UpdateClientTable(clientName string, tableNumber int) error {
 	if exists, _ := m.IsClientExists(clientName); !exists {
-		return fmt.Errorf("MemoryStore.UpdateClientTable: %w", store.ClientUnknown)
+		return fmt.Errorf("MemoryStore.UpdateClientTable: %w", store.ClientDoesNotExist)
 	}
 
 	client := m.clients[clientName]
@@ -47,7 +47,7 @@ func (m *MemoryStore) UpdateClientTable(clientName string, tableNumber int) erro
 
 func (m *MemoryStore) UpdateClientPlayingSince(clientName string, t store.DayTime) error {
 	if exists, _ := m.IsClientExists(clientName); !exists {
-		return fmt.Errorf("MemoryStore.UpdateClientTable: %w", store.ClientUnknown)
+		return fmt.Errorf("MemoryStore.UpdateClientTable: %w", store.ClientDoesNotExist)
 	}
 
 	client := m.clients[clientName]
@@ -59,9 +59,16 @@ func (m *MemoryStore) UpdateClientPlayingSince(clientName string, t store.DayTim
 func (m *MemoryStore) Client(clientName string) (client store.Client, err error) {
 	client, ok := m.clients[clientName]
 	if !ok {
-		return client, fmt.Errorf("MemoryStore.Client: %w", store.ClientUnknown)
+		return client, fmt.Errorf("MemoryStore.Client: %w", store.ClientDoesNotExist)
 	}
 	return client, nil
+}
+
+func (m *MemoryStore) Clients() (clients []store.Client, err error) {
+	for _, v := range m.clients {
+		clients = append(clients, v)
+	}
+	return clients, nil
 }
 
 func (m *MemoryStore) Table(tableNumber int) (table store.Table, err error) {

@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-var ClientUnknown = fmt.Errorf("ClientUnknown")
+var ClientDoesNotExist = fmt.Errorf("ClientDoesNotExist")
 
 type Store interface {
 	AddClient(clientName string) error
@@ -13,6 +13,7 @@ type Store interface {
 	UpdateClientTable(clientName string, tableNumber int) error
 	UpdateClientPlayingSince(clientName string, t DayTime) error
 	Client(clientName string) (Client, error)
+	Clients() ([]Client, error)
 	RemoveClient(clientName string) error
 
 	Table(tableNumber int) (Table, error)

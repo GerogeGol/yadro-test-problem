@@ -5,188 +5,240 @@ import (
 
 	memqueue "github.com/GerogeGol/yadro-test-problem/domain/queue/memory"
 	"github.com/GerogeGol/yadro-test-problem/domain/service"
+	"github.com/GerogeGol/yadro-test-problem/domain/service/event"
 	"github.com/GerogeGol/yadro-test-problem/domain/store"
 	memstore "github.com/GerogeGol/yadro-test-problem/domain/store/memory"
 	"github.com/GerogeGol/yadro-test-problem/domain/test"
 )
 
-var dummyDayTime = test.DummyDayTime
-var dummyClient = test.DummyClient
-var dummyTableNumber = test.DummyTableNumber
-var dummyComputersCount = 2
-var dummyMoneyPerHour = 1.0
+func TestArriveEvent(t *testing.T) {
+	t.Run("client arrives", func(t *testing.T) {
+		s := service.NewService(dummyClub())
 
-func TestArrive(t *testing.T) {
-	t.Run("client arrived", func(t *testing.T) {
-		club := service.NewComputerClub(dummyComputersCount, dummyMoneyPerHour, dummyDayTime, memstore.NewStore(), memqueue.NewQueue())
-
-		err := club.Arrive(dummyDayTime, dummyClient)
-		test.AssertNoError(t, err)
+		arrivalEvent := event.NewArrivalEvent(dummyDayTime, dummyClient)
+		gotEvent := s.ServeEvent(arrivalEvent)
+		test.AssertTrue(t, event.IsEmpty(gotEvent))
 	})
+	t.Run("client arrives at closed time ", func(t *testing.T) {
+		s := service.NewService(dummyClub())
 
-	t.Run("client is already in computer club. should return YouShallNotPass", func(t *testing.T) {
-		club := service.NewComputerClub(dummyComputersCount, dummyMoneyPerHour, dummyDayTime, memstore.NewStore(), memqueue.NewQueue())
-		err := club.Arrive(dummyDayTime, dummyClient)
-		test.AssertNoError(t, err)
-
-		err = club.Arrive(dummyDayTime, dummyClient)
-		test.AssertError(t, err, service.YouShallNotPass)
+		arrivalEvent := event.NewArrivalEvent(store.NewDayTime(21, 0), dummyClient)
+		gotEvent := s.ServeEvent(arrivalEvent)
+		assertErrorEvent(t, gotEvent, service.NotOpenYet)
 	})
+	t.Run("client arrives 2 times", func(t *testing.T) {
+		s := service.NewService(dummyClub())
 
-	t.Run("client arrived but club is closed. should return NotOpenYet", func(t *testing.T) {
-		club := service.NewComputerClub(dummyComputersCount, dummyMoneyPerHour, store.NewDayTime(9, 0), memstore.NewStore(), memqueue.NewQueue())
-		err := club.Arrive(store.NewDayTime(8, 9), dummyClient)
-		test.AssertError(t, err, service.NotOpenYet)
+		arrivalEvent := event.NewArrivalEvent(dummyDayTime, dummyClient)
+		gotEvent := s.ServeEvent(arrivalEvent)
+		test.AssertTrue(t, event.IsEmpty(gotEvent))
+
+		gotEvent = s.ServeEvent(arrivalEvent)
+		assertErrorEvent(t, gotEvent, service.YouShallNotPass)
 	})
 }
 
-func TestSitDown(t *testing.T) {
-	t.Run("client sat down at a free table", func(t *testing.T) {
-		club := service.NewComputerClub(dummyComputersCount, dummyMoneyPerHour, dummyDayTime, memstore.NewStore(), memqueue.NewQueue())
-		err := club.Arrive(dummyDayTime, dummyClient)
-		test.AssertNoError(t, err)
+func TestSitDownEvent(t *testing.T) {
+	t.Run("client arrives and sit down", func(t *testing.T) {
+		s := service.NewService(dummyClub())
 
-		err = club.SitDown(dummyDayTime, dummyClient, dummyTableNumber)
-		test.AssertNoError(t, err)
+		arrivalEvent := event.NewArrivalEvent(dummyDayTime, dummyClient)
+		gotEvent := s.ServeEvent(arrivalEvent)
+		assertNoErrorEvent(t, gotEvent)
+
+		sitDownEvent := event.NewSitDownEvent(dummyDayTime, dummyClient, dummyTableNumber)
+		gotEvent = s.ServeEvent(sitDownEvent)
+		assertNoErrorEvent(t, gotEvent)
+
+		outSitDownEvent, ok := gotEvent.(*event.OutSitDownEvent)
+		test.AssertTrue(t, ok)
+		test.AssertEqual(t, gotEvent.Id(), event.OutSitDownEventId)
+		test.AssertEqual(t, outSitDownEvent.Table(), dummyTableNumber)
+		test.AssertEqual(t, outSitDownEvent.Client(), dummyClient)
+
+	})
+	t.Run("client arrives, sits down and changes sit", func(t *testing.T) {
+		s := service.NewService(service.NewComputerClub(2, dummyMoneyPerHour, dummyOpenTime, dummyCloseTime, memstore.NewStore(), memqueue.NewQueue()))
+
+		arrivalEvent := event.NewArrivalEvent(dummyDayTime, dummyClient)
+		gotEvent := s.ServeEvent(arrivalEvent)
+		assertNoErrorEvent(t, gotEvent)
+
+		sitDownEvent := event.NewSitDownEvent(dummyDayTime, dummyClient, 1)
+		gotEvent = s.ServeEvent(sitDownEvent)
+		assertNoErrorEvent(t, gotEvent)
+
+		sitDownEvent = event.NewSitDownEvent(dummyDayTime, dummyClient, 2)
+		gotEvent = s.ServeEvent(sitDownEvent)
+		assertNoErrorEvent(t, gotEvent)
+
+		outSitDownEvent, ok := gotEvent.(*event.OutSitDownEvent)
+		test.AssertTrue(t, ok)
+		test.AssertEqual(t, outSitDownEvent.Table(), 2)
+		test.AssertEqual(t, outSitDownEvent.Client(), dummyClient)
+
 	})
 
-	t.Run("client change table to free table", func(t *testing.T) {
-		club := service.NewComputerClub(dummyComputersCount, dummyMoneyPerHour, dummyDayTime, memstore.NewStore(), memqueue.NewQueue())
-		err := club.Arrive(dummyDayTime, dummyClient)
-		test.AssertNoError(t, err)
+	t.Run("client arrives, sits down to busy table", func(t *testing.T) {
+		s := service.NewService(dummyClub())
 
-		err = club.SitDown(dummyDayTime, dummyClient, 1)
-		test.AssertNoError(t, err)
+		arrivalEvent := event.NewArrivalEvent(dummyDayTime, dummyClient)
+		gotEvent := s.ServeEvent(arrivalEvent)
+		assertNoErrorEvent(t, gotEvent)
 
-		err = club.SitDown(dummyDayTime, dummyClient, 2)
-		test.AssertNoError(t, err)
-	})
-
-	t.Run("client change table to free table. New client takes his previous seat", func(t *testing.T) {
-		club := service.NewComputerClub(dummyComputersCount, dummyMoneyPerHour, dummyDayTime, memstore.NewStore(), memqueue.NewQueue())
-		err := club.Arrive(dummyDayTime, dummyClient)
-		test.AssertNoError(t, err)
-
-		err = club.SitDown(dummyDayTime, dummyClient, 1)
-		test.AssertNoError(t, err)
-
-		err = club.SitDown(dummyDayTime, dummyClient, 2)
-		test.AssertNoError(t, err)
+		sitDownEvent := event.NewSitDownEvent(dummyDayTime, dummyClient, dummyTableNumber)
+		gotEvent = s.ServeEvent(sitDownEvent)
+		assertNoErrorEvent(t, gotEvent)
 
 		newClient := "NewClient"
-		err = club.Arrive(dummyDayTime, newClient)
-		test.AssertNoError(t, err)
+		arrivalEvent = event.NewArrivalEvent(dummyDayTime, newClient)
+		gotEvent = s.ServeEvent(arrivalEvent)
+		assertNoErrorEvent(t, gotEvent)
 
-		err = club.SitDown(dummyDayTime, dummyClient, 1)
-		test.AssertNoError(t, err)
+		sitDownEvent = event.NewSitDownEvent(dummyDayTime, dummyClient, dummyTableNumber)
+		gotEvent = s.ServeEvent(sitDownEvent)
+		assertErrorEvent(t, gotEvent, service.PlaceIsBusy)
 	})
 
-	t.Run("client sat down at an occupied table", func(t *testing.T) {
-		club := service.NewComputerClub(dummyComputersCount, dummyMoneyPerHour, dummyDayTime, memstore.NewStore(), memqueue.NewQueue())
-		err := club.Arrive(dummyDayTime, dummyClient)
-		test.AssertNoError(t, err)
+	t.Run("client that not in club sit downt. should get ClientUnknown", func(t *testing.T) {
+		s := service.NewService(dummyClub())
 
-		err = club.SitDown(dummyDayTime, dummyClient, dummyTableNumber)
-		test.AssertNoError(t, err)
-
-		err = club.SitDown(dummyDayTime, dummyClient, dummyTableNumber)
-		test.AssertError(t, err, service.PlaceIsBusy)
-	})
-
-	t.Run("client change table to an occupied table", func(t *testing.T) {
-		club := service.NewComputerClub(dummyComputersCount, dummyMoneyPerHour, dummyDayTime, memstore.NewStore(), memqueue.NewQueue())
-		err := club.Arrive(dummyDayTime, dummyClient)
-		test.AssertNoError(t, err)
-
-		err = club.SitDown(dummyDayTime, dummyClient, dummyTableNumber)
-		test.AssertNoError(t, err)
-
-		newClient := "NewClient"
-
-		err = club.Arrive(dummyDayTime, newClient)
-		test.AssertNoError(t, err)
-
-		err = club.SitDown(dummyDayTime, newClient, 2)
-		test.AssertNoError(t, err)
-
-		err = club.SitDown(dummyDayTime, newClient, dummyTableNumber)
-		test.AssertError(t, err, service.PlaceIsBusy)
-	})
-
-	t.Run("client not in a club", func(t *testing.T) {
-		club := service.NewComputerClub(dummyComputersCount, dummyMoneyPerHour, dummyDayTime, memstore.NewStore(), memqueue.NewQueue())
-
-		err := club.SitDown(dummyDayTime, dummyClient, dummyTableNumber)
-		test.AssertError(t, err, service.ClientUnknown)
+		sitDownEvent := event.NewSitDownEvent(dummyDayTime, dummyClient, dummyTableNumber)
+		gotEvent := s.ServeEvent(sitDownEvent)
+		assertErrorEvent(t, gotEvent, service.ClientUnknown)
 	})
 }
 
-func TestWait(t *testing.T) {
-	t.Run("client wait", func(t *testing.T) {
-		club := service.NewComputerClub(dummyComputersCount, dummyMoneyPerHour, dummyDayTime, memstore.NewStore(), memqueue.NewQueue())
-		_ = club.Arrive(dummyDayTime, dummyClient)
+func TestWaitEvent(t *testing.T) {
+	t.Run("3 clients. every one waits after another. first sits", func(t *testing.T) {
+		s := service.NewService(service.NewComputerClub(1, dummyMoneyPerHour, dummyOpenTime, dummyCloseTime, memstore.NewStore(), memqueue.NewQueue()))
 
-		isWaiting, err := club.Wait(dummyDayTime, dummyClient)
-		test.AssertError(t, err, service.ICanWaitNoLonger)
-		test.AssertFalse(t, isWaiting)
-	})
+		arrivalEvent := event.NewArrivalEvent(dummyDayTime, dummyClient)
+		gotEvent := s.ServeEvent(arrivalEvent)
+		assertNoErrorEvent(t, gotEvent)
 
-	t.Run("client wating for an empty table", func(t *testing.T) {
-		club := service.NewComputerClub(1, dummyMoneyPerHour, dummyDayTime, memstore.NewStore(), memqueue.NewQueue())
+		waitEvent := event.NewWaitEvent(dummyDayTime, dummyClient)
+		gotEvent = s.ServeEvent(waitEvent)
+		assertErrorEvent(t, gotEvent, service.ICanWaitNoLonger)
 
-		_ = club.Arrive(dummyDayTime, dummyClient)
-		_ = club.SitDown(dummyDayTime, dummyClient, dummyTableNumber)
-
-		newClient := "NewClient"
-		_ = club.Arrive(dummyDayTime, newClient)
-		isWaiting, err := club.Wait(dummyDayTime, newClient)
-		test.AssertNoError(t, err)
-		test.AssertTrue(t, isWaiting)
-	})
-
-	t.Run("client no wating for an empty table", func(t *testing.T) {
-		club := service.NewComputerClub(1, dummyMoneyPerHour, dummyDayTime, memstore.NewStore(), memqueue.NewQueue())
-
-		_ = club.Arrive(dummyDayTime, dummyClient)
-		_ = club.SitDown(dummyDayTime, dummyClient, dummyTableNumber)
+		sitDownEvent := event.NewSitDownEvent(dummyDayTime, dummyClient, dummyTableNumber)
+		gotEvent = s.ServeEvent(sitDownEvent)
+		assertNoErrorEvent(t, gotEvent)
 
 		newClient := "NewClient"
-		_ = club.Arrive(dummyDayTime, newClient)
-		_, err := club.Wait(dummyDayTime, newClient)
-		test.AssertNoError(t, err)
+		arrivalEvent = event.NewArrivalEvent(dummyDayTime, newClient)
+		gotEvent = s.ServeEvent(arrivalEvent)
+		assertNoErrorEvent(t, gotEvent)
 
-		newClient2 := "newClient2"
+		waitEvent = event.NewWaitEvent(dummyDayTime, newClient)
+		gotEvent = s.ServeEvent(waitEvent)
+		assertNoErrorEvent(t, gotEvent)
+		test.AssertTrue(t, event.IsEmpty(gotEvent))
 
-		_ = club.Arrive(dummyDayTime, newClient2)
-		isWaiting, err := club.Wait(dummyDayTime, newClient2)
-		test.AssertNoError(t, err)
-		test.AssertFalse(t, isWaiting)
+		newClient2 := "NewClient2"
+		arrivalEvent = event.NewArrivalEvent(dummyDayTime, newClient2)
+		gotEvent = s.ServeEvent(arrivalEvent)
+		assertNoErrorEvent(t, gotEvent)
+
+		waitEvent = event.NewWaitEvent(dummyDayTime, newClient2)
+		gotEvent = s.ServeEvent(waitEvent)
+
+		outLeaveEvent, ok := gotEvent.(*event.OutLeaveEvent)
+		test.AssertTrue(t, ok)
+		test.AssertEqual(t, outLeaveEvent.Id(), event.OutLeaveEventId)
+		test.AssertEqual(t, outLeaveEvent.Client(), newClient2)
+	})
+
+}
+
+func TestLeaveEvent(t *testing.T) {
+	t.Run("client just leave", func(t *testing.T) {
+		s := service.NewService(service.NewComputerClub(1, dummyMoneyPerHour, dummyOpenTime, dummyCloseTime, memstore.NewStore(), memqueue.NewQueue()))
+
+		arrivalEvent := event.NewArrivalEvent(dummyDayTime, dummyClient)
+		gotEvent := s.ServeEvent(arrivalEvent)
+		assertNoErrorEvent(t, gotEvent)
+
+		leaveEvent := event.NewLeaveEvent(dummyDayTime, dummyClient)
+		gotEvent = s.ServeEvent(leaveEvent)
+		assertEmptyEvent(t, gotEvent)
+	})
+
+	t.Run("client arrive, sit down and leave. his place taken by other client", func(t *testing.T) {
+		s := service.NewService(service.NewComputerClub(1, dummyMoneyPerHour, dummyOpenTime, dummyCloseTime, memstore.NewStore(), memqueue.NewQueue()))
+
+		arrivalEvent := event.NewArrivalEvent(dummyDayTime, dummyClient)
+		gotEvent := s.ServeEvent(arrivalEvent)
+		assertNoErrorEvent(t, gotEvent)
+
+		sitEvent := event.NewSitDownEvent(dummyDayTime, dummyClient, dummyTableNumber)
+		gotEvent = s.ServeEvent(sitEvent)
+		assertNoErrorEvent(t, gotEvent)
+
+		leaveEvent := event.NewLeaveEvent(dummyDayTime, dummyClient)
+		gotEvent = s.ServeEvent(leaveEvent)
+		assertEmptyEvent(t, gotEvent)
+
+		newClient := "NewClient"
+		arrivalEvent = event.NewArrivalEvent(dummyDayTime, newClient)
+		gotEvent = s.ServeEvent(arrivalEvent)
+		assertNoErrorEvent(t, gotEvent)
+
+		sitEvent = event.NewSitDownEvent(dummyDayTime, newClient, dummyTableNumber)
+		gotEvent = s.ServeEvent(sitEvent)
+		assertNoErrorEvent(t, gotEvent)
+	})
+
+	t.Run("client arrive, sit down and leave. his place taken by client in queue", func(t *testing.T) {
+		s := service.NewService(service.NewComputerClub(1, dummyMoneyPerHour, dummyOpenTime, dummyCloseTime, memstore.NewStore(), memqueue.NewQueue()))
+
+		arrivalEvent := event.NewArrivalEvent(dummyDayTime, dummyClient)
+		gotEvent := s.ServeEvent(arrivalEvent)
+		assertNoErrorEvent(t, gotEvent)
+
+		sitEvent := event.NewSitDownEvent(dummyDayTime, dummyClient, dummyTableNumber)
+		gotEvent = s.ServeEvent(sitEvent)
+		assertNoErrorEvent(t, gotEvent)
+
+		newClient := "NewClient"
+		arrivalEvent = event.NewArrivalEvent(dummyDayTime, newClient)
+		gotEvent = s.ServeEvent(arrivalEvent)
+		assertNoErrorEvent(t, gotEvent)
+
+		waitClient := event.NewWaitEvent(dummyDayTime, newClient)
+		gotEvent = s.ServeEvent(waitClient)
+		assertNoErrorEvent(t, gotEvent)
+
+		leaveEvent := event.NewLeaveEvent(dummyDayTime, dummyClient)
+		gotEvent = s.ServeEvent(leaveEvent)
+
+		outSitDownEvent, ok := gotEvent.(*event.OutSitDownEvent)
+		test.AssertTrue(t, ok)
+		test.AssertEqual(t, outSitDownEvent.Client(), newClient)
+		test.AssertEqual(t, outSitDownEvent.Table(), dummyTableNumber)
 	})
 }
 
-func TestLeave(t *testing.T) {
-	t.Run("client arrive and leave", func(t *testing.T) {
-		club := service.NewComputerClub(dummyComputersCount, dummyMoneyPerHour, dummyDayTime, memstore.NewStore(), memqueue.NewQueue())
-		_ = club.Arrive(dummyDayTime, dummyClient)
+func assertEmptyEvent(t testing.TB, e event.Event) {
+	t.Helper()
+	if !event.IsEmpty(e) {
+		t.Fatalf("got error event: %#v", e)
+	}
+}
 
-		tableNumber, err := club.Leave(dummyDayTime, dummyClient)
-		test.AssertNoError(t, err)
-		test.AssertEqual(t, tableNumber, 0)
-	})
-	t.Run("client arrive and leave", func(t *testing.T) {
-		club := service.NewComputerClub(dummyComputersCount, dummyMoneyPerHour, dummyDayTime, memstore.NewStore(), memqueue.NewQueue())
+func assertNoErrorEvent(t testing.TB, e event.Event) {
+	t.Helper()
+	err, ok := e.(*event.ErrorEvent)
+	if ok {
+		t.Fatalf("got error event: %q", err.Err())
+	}
+}
 
-		_, err := club.Leave(dummyDayTime, dummyClient)
-		test.AssertError(t, err, service.ClientUnknown)
-	})
-	t.Run("client arrive and sit and leave", func(t *testing.T) {
-		club := service.NewComputerClub(dummyComputersCount, dummyMoneyPerHour, dummyDayTime, memstore.NewStore(), memqueue.NewQueue())
-		_ = club.Arrive(dummyDayTime, dummyClient)
-
-		err := club.SitDown(dummyDayTime, dummyClient, dummyTableNumber)
-
-		tableNumber, err := club.Leave(dummyDayTime, dummyClient)
-		test.AssertNoError(t, err)
-		test.AssertEqual(t, tableNumber, dummyTableNumber)
-	})
+func assertErrorEvent(t testing.TB, e event.Event, err error) {
+	t.Helper()
+	errEvent, ok := e.(*event.ErrorEvent)
+	if !ok {
+		t.Fatalf("expected error event got: %#v", e)
+	}
+	test.AssertError(t, errEvent.Err(), err)
 }
