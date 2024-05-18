@@ -175,14 +175,14 @@ func (cc *ComputerClub) Info(tableNumber int) (store.Table, error) {
 	return cc.store.Table(tableNumber)
 }
 
-func (cc *ComputerClub) TablesInfo() ([]store.Table, error) {
-	var tables []store.Table
+func (cc *ComputerClub) TablesInfo() ([]TableInfo, error) {
+	var tables []TableInfo
 	for i := 1; i <= cc.ComputerCount; i++ {
 		table, err := cc.Info(i)
 		if err != nil {
 			return nil, err
 		}
-		tables = append(tables, table)
+		tables = append(tables, TableInfo{Number: i, Profit: table.Profit, WorkingTime: table.WorkingTime})
 	}
 	return tables, nil
 }
@@ -228,6 +228,10 @@ func (cc *ComputerClub) changeClientTable(t store.DayTime, clientName string, ta
 func (cc *ComputerClub) clientLeave(t store.DayTime, client store.Client) error {
 	if err := cc.store.RemoveClient(client.Name); err != nil {
 		return err
+	}
+
+	if client.Table == 0 {
+		return nil
 	}
 
 	table, err := cc.store.Table(client.Table)

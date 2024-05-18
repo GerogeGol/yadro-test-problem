@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/GerogeGol/yadro-test-problem/domain/service/event"
 )
@@ -63,4 +64,26 @@ func (s *Service) ServeEvent(e event.InputEvent) event.Event {
 		}
 	}
 	return event.EmptyEvent
+}
+
+func (s *Service) Close() ([]event.LeaveEvent, error) {
+	clients, err := s.cc.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	var events []event.LeaveEvent
+	for _, c := range clients {
+		events = append(events, *event.NewLeaveEvent(s.cc.CloseTime, c.Name))
+	}
+
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].Client() <= events[j].Client()
+
+	})
+	return events, nil
+}
+
+func (s *Service) Profit() ([]TableInfo, error) {
+	return s.cc.TablesInfo()
 }

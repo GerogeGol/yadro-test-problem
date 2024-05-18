@@ -1,6 +1,8 @@
 package service_test
 
 import (
+	"fmt"
+	"math"
 	"testing"
 
 	memqueue "github.com/GerogeGol/yadro-test-problem/domain/queue/memory"
@@ -216,6 +218,150 @@ func TestLeaveEvent(t *testing.T) {
 		test.AssertTrue(t, ok)
 		test.AssertEqual(t, outSitDownEvent.Client(), newClient)
 		test.AssertEqual(t, outSitDownEvent.Table(), dummyTableNumber)
+	})
+}
+
+func TestServiceClose(t *testing.T) {
+	t.Run("no clients stayed unitl closing", func(t *testing.T) {
+		s := service.NewService(dummyClub())
+
+		arrivalEvent := event.NewArrivalEvent(dummyDayTime, dummyClient)
+		gotEvent := s.ServeEvent(arrivalEvent)
+		assertNoErrorEvent(t, gotEvent)
+
+		sitEvent := event.NewSitDownEvent(dummyDayTime, dummyClient, dummyTableNumber)
+		gotEvent = s.ServeEvent(sitEvent)
+		assertNoErrorEvent(t, gotEvent)
+
+		leaveEvent := event.NewLeaveEvent(dummyDayTime, dummyClient)
+		gotEvent = s.ServeEvent(leaveEvent)
+		assertNoErrorEvent(t, gotEvent)
+
+		clients, err := s.Close()
+		test.AssertNoError(t, err)
+		test.AssertEqual(t, len(clients), 0)
+	})
+
+	t.Run("one client stayed unitl closing", func(t *testing.T) {
+		s := service.NewService(dummyClub())
+
+		arrivalEvent := event.NewArrivalEvent(dummyDayTime, dummyClient)
+		gotEvent := s.ServeEvent(arrivalEvent)
+		assertNoErrorEvent(t, gotEvent)
+
+		sitEvent := event.NewSitDownEvent(dummyDayTime, dummyClient, dummyTableNumber)
+		gotEvent = s.ServeEvent(sitEvent)
+		assertNoErrorEvent(t, gotEvent)
+
+		clients, err := s.Close()
+		test.AssertNoError(t, err)
+		test.AssertEqual(t, len(clients), 1)
+	})
+
+	t.Run("clients stayed unitl closing", func(t *testing.T) {
+		s := service.NewService(service.NewComputerClub(9, dummyMoneyPerHour, dummyOpenTime, dummyCloseTime, memstore.NewStore(), memqueue.NewQueue()))
+		clientsCount := 9
+		var clientNames []string
+		for i := 1; i <= clientsCount; i++ {
+			client := fmt.Sprintf("Client%d", i)
+
+			arrivalEvent := event.NewArrivalEvent(dummyDayTime, client)
+			gotEvent := s.ServeEvent(arrivalEvent)
+			assertNoErrorEvent(t, gotEvent)
+
+			sitEvent := event.NewSitDownEvent(dummyDayTime, client, i)
+			gotEvent = s.ServeEvent(sitEvent)
+			assertNoErrorEvent(t, gotEvent)
+			clientNames = append(clientNames, client)
+		}
+
+		clients, err := s.Close()
+		test.AssertNoError(t, err)
+		test.AssertEqual(t, len(clients), clientsCount)
+		for i, client := range clients {
+			test.AssertEqual(t, client.Client(), clientNames[i])
+		}
+	})
+}
+
+func TestServiceProfit(t *testing.T) {
+	t.Run("no clients seated", func(t *testing.T) {
+		tablesCount := 9
+		s := service.NewService(service.NewComputerClub(tablesCount, dummyMoneyPerHour, dummyOpenTime, dummyCloseTime, memstore.NewStore(), memqueue.NewQueue()))
+		clientsCount := tablesCount
+		for i := 1; i <= clientsCount; i++ {
+			client := fmt.Sprintf("Client%d", i)
+
+			arrivalEvent := event.NewArrivalEvent(dummyDayTime, client)
+			gotEvent := s.ServeEvent(arrivalEvent)
+			assertNoErrorEvent(t, gotEvent)
+		}
+
+		tables, err := s.Profit()
+		test.AssertNoError(t, err)
+		test.AssertEqual(t, len(tables), tablesCount)
+		for _, table := range tables {
+			test.AssertEqual(t, table.Profit, 0)
+			test.AssertEqual(t, table.WorkingTime, 0)
+		}
+	})
+
+	t.Run("all clients seated and leaved at close", func(t *testing.T) {
+		tablesCount := 9
+		s := service.NewService(service.NewComputerClub(tablesCount, dummyMoneyPerHour, dummyOpenTime, dummyCloseTime, memstore.NewStore(), memqueue.NewQueue()))
+		clientsCount := tablesCount
+		for i := 1; i <= clientsCount; i++ {
+			client := fmt.Sprintf("Client%d", i)
+
+			arrivalEvent := event.NewArrivalEvent(dummyDayTime, client)
+			gotEvent := s.ServeEvent(arrivalEvent)
+			assertNoErrorEvent(t, gotEvent)
+
+			sitEvent := event.NewSitDownEvent(dummyDayTime, client, i)
+			gotEvent = s.ServeEvent(sitEvent)
+			assertNoErrorEvent(t, gotEvent)
+
+			leaveEvent := event.NewLeaveEvent(dummyCloseTime, client)
+			gotEvent = s.ServeEvent(leaveEvent)
+			assertNoErrorEvent(t, gotEvent)
+		}
+
+		tables, err := s.Profit()
+		test.AssertNoError(t, err)
+		test.AssertEqual(t, len(tables), tablesCount)
+		for _, table := range tables {
+			workingTime := dummyCloseTime.Sub(dummyOpenTime.Time)
+			test.AssertEqual(t, table.Profit, math.Ceil(workingTime.Hours())*dummyMoneyPerHour)
+			test.AssertEqual(t, table.WorkingTime, workingTime)
+		}
+	})
+
+	t.Run("all clients seating unitl closing", func(t *testing.T) {
+		tablesCount := 9
+		s := service.NewService(service.NewComputerClub(tablesCount, dummyMoneyPerHour, dummyOpenTime, dummyCloseTime, memstore.NewStore(), memqueue.NewQueue()))
+		clientsCount := tablesCount
+		for i := 1; i <= clientsCount; i++ {
+			client := fmt.Sprintf("Client%d", i)
+
+			arrivalEvent := event.NewArrivalEvent(dummyDayTime, client)
+			gotEvent := s.ServeEvent(arrivalEvent)
+			assertNoErrorEvent(t, gotEvent)
+
+			sitEvent := event.NewSitDownEvent(dummyDayTime, client, i)
+			gotEvent = s.ServeEvent(sitEvent)
+			assertNoErrorEvent(t, gotEvent)
+		}
+		_, err := s.Close()
+		test.AssertNoError(t, err)
+
+		tables, err := s.Profit()
+		test.AssertNoError(t, err)
+		test.AssertEqual(t, len(tables), tablesCount)
+		for _, table := range tables {
+			workingTime := dummyCloseTime.Sub(dummyOpenTime.Time)
+			test.AssertEqual(t, table.Profit, math.Ceil(workingTime.Hours())*dummyMoneyPerHour)
+			test.AssertEqual(t, table.WorkingTime, workingTime)
+		}
 	})
 }
 
