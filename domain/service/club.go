@@ -90,6 +90,14 @@ func (cc *ComputerClub) SitDown(t store.DayTime, clientName string, tableNumber 
 }
 
 func (cc *ComputerClub) Wait(t store.DayTime, clientName string) (bool, error) {
+	exists, err := cc.store.IsClientExists(clientName)
+	if err != nil {
+		return false, fmt.Errorf("ComputerClub.SitDown: %w", err)
+	}
+	if !exists {
+		return false, ClientUnknown
+	}
+
 	if cc.queue.Len() >= cc.ComputerCount {
 		return false, nil
 	}
@@ -182,7 +190,8 @@ func (cc *ComputerClub) TablesInfo() ([]TableInfo, error) {
 		if err != nil {
 			return nil, err
 		}
-		tables = append(tables, TableInfo{Number: i, Profit: table.Profit, WorkingTime: table.WorkingTime})
+		tableInfo := TableInfo{Number: i, WorkingTime: table.WorkingTime, Profit: table.Profit}
+		tables = append(tables, tableInfo)
 	}
 	return tables, nil
 }

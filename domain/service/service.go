@@ -18,9 +18,13 @@ func NewService(cc *ComputerClub) *Service {
 func (s *Service) ServeEvent(e event.InputEvent) event.Event {
 	switch e.Id() {
 	case event.ArrivalEventId:
-		err := s.cc.Arrive(e.Time(), e.Client())
+		arrivalEvent, ok := e.(*event.ArriveEvent)
+		if !ok {
+			return event.NewErrorEvent(e.Time(), fmt.Errorf("Service.ServeEvent: cant interpret event to ArrivalEvent"))
+		}
+		err := s.cc.Arrive(arrivalEvent.Time(), arrivalEvent.Client())
 		if err != nil {
-			return event.NewErrorEvent(e.Time(), err)
+			return event.NewErrorEvent(arrivalEvent.Time(), err)
 		}
 	case event.SitDownEventId:
 		sitDownEvent, ok := e.(*event.SitDownEvent)
@@ -33,7 +37,6 @@ func (s *Service) ServeEvent(e event.InputEvent) event.Event {
 			return event.NewErrorEvent(e.Time(), err)
 		}
 
-		return event.NewOutSitDownEvent(sitDownEvent.Time(), sitDownEvent.Client(), sitDownEvent.Table())
 	case event.WaitEventId:
 		waitEvent, ok := e.(*event.WaitEvent)
 		if !ok {
@@ -66,15 +69,15 @@ func (s *Service) ServeEvent(e event.InputEvent) event.Event {
 	return event.EmptyEvent
 }
 
-func (s *Service) Close() ([]event.LeaveEvent, error) {
+func (s *Service) Close() ([]event.OutLeaveEvent, error) {
 	clients, err := s.cc.Close()
 	if err != nil {
 		return nil, err
 	}
 
-	var events []event.LeaveEvent
+	var events []event.OutLeaveEvent
 	for _, c := range clients {
-		events = append(events, *event.NewLeaveEvent(s.cc.CloseTime, c.Name))
+		events = append(events, *event.NewOutLeaveEvent(s.cc.CloseTime, c.Name))
 	}
 
 	sort.Slice(events, func(i, j int) bool {

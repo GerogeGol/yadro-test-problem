@@ -1,6 +1,10 @@
 package event
 
-import "github.com/GerogeGol/yadro-test-problem/domain/store"
+import (
+	"fmt"
+
+	"github.com/GerogeGol/yadro-test-problem/domain/store"
+)
 
 var OutLeaveEventId = 11
 var OutSitDownEventId = 12
@@ -15,8 +19,17 @@ func NewErrorEvent(t store.DayTime, err error) *ErrorEvent {
 	return &ErrorEvent{&BaseEvent{t, ErrorEventId}, err}
 }
 
-func (r *ErrorEvent) Err() error {
-	return r.err
+func (e *ErrorEvent) Err() error {
+	return e.err
+}
+
+func (e *ErrorEvent) String() string {
+	return fmt.Sprintf("%s %d %s", e.Time(), e.Id(), e.Err())
+}
+
+func IsError(e Event) bool {
+	_, ok := e.(*ErrorEvent)
+	return ok
 }
 
 type OutSitDownEvent struct {
@@ -37,6 +50,10 @@ func (e *OutSitDownEvent) Client() string {
 	return e.client
 }
 
+func (e *OutSitDownEvent) String() string {
+	return fmt.Sprintf("%s %d %s %d", e.Time(), e.Id(), e.Client(), e.Table())
+}
+
 type OutLeaveEvent struct {
 	Event
 	client string
@@ -46,6 +63,10 @@ func NewOutLeaveEvent(t store.DayTime, client string) *OutLeaveEvent {
 	return &OutLeaveEvent{Event: &BaseEvent{t, OutLeaveEventId}, client: client}
 }
 
-func (e OutLeaveEvent) Client() string {
+func (e *OutLeaveEvent) Client() string {
 	return e.client
+}
+
+func (e *OutLeaveEvent) String() string {
+	return fmt.Sprintf("%s %d %s", e.Time(), e.Id(), e.Client())
 }

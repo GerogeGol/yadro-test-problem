@@ -146,6 +146,7 @@ func TestParseArriveEvent(t *testing.T) {
 			{"08:48 112 client1", parse.IncorrectEventFormat},
 			{"2:48 1 client2", parse.IncorrectDayTimeFormat},
 			{"12:48  1  client2", parse.IncorrectEventFormat},
+			{"12:48 1 client2!", parse.IncorrectClientNameFormat},
 		}
 
 		for i, c := range cases {

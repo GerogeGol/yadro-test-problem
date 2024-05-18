@@ -20,15 +20,18 @@ var IncorrectClientNameFormat = fmt.Errorf("incorrect client name format. should
 func TablesCount(s string) (int, error) {
 	tablesCount, err := positiveNumber(s)
 	if err != nil {
-		return 0, fmt.Errorf("ParseTablesCount: %w", err)
+		return 0, fmt.Errorf("parse.TablesCount: %w", err)
 	}
 	return tablesCount, nil
 }
 
-func HourCost(s string) (int, error) {
-	hourCost, err := positiveNumber(s)
+func HourCost(s string) (float64, error) {
+	hourCost, err := strconv.ParseFloat(s, 64)
 	if err != nil {
-		return 0, fmt.Errorf("ParseHourCost: %w", err)
+		return 0, fmt.Errorf("parse.HourCost: %w", err)
+	}
+	if hourCost <= 0 {
+		return 0, fmt.Errorf("parse.HourCost: %w", LessOrEqualZeroError)
 	}
 	return hourCost, nil
 }
@@ -36,29 +39,29 @@ func HourCost(s string) (int, error) {
 func DayTime(s string) (time store.DayTime, err error) {
 	parts := strings.Split(s, ":")
 	if len(parts) != 2 || len(parts[0]) != 2 || len(parts[1]) != 2 {
-		err = fmt.Errorf("ParseDayTime: %w", IncorrectDayTimeFormat)
+		err = fmt.Errorf("parse.DayTime: %w", IncorrectDayTimeFormat)
 		return
 	}
 
 	hours, err := strconv.Atoi(parts[0])
 	if err != nil {
-		err = fmt.Errorf("ParseDayTime: %w", err)
+		err = fmt.Errorf("parse.DayTime: %w", err)
 		return
 	}
 
 	if hours < 0 || hours >= 24 {
-		err = fmt.Errorf("ParseDayTime: %w", IncorrectDayTimeFormat)
+		err = fmt.Errorf("parse.DayTime: %w", IncorrectDayTimeFormat)
 		return
 	}
 
 	minutes, err := strconv.Atoi(parts[1])
 	if err != nil {
-		err = fmt.Errorf("ParseDayTime: %w", err)
+		err = fmt.Errorf("parse.DayTime: %w", err)
 		return
 	}
 
 	if minutes < 0 || minutes > 60 {
-		err = fmt.Errorf("ParseDayTime: %w", IncorrectDayTimeFormat)
+		err = fmt.Errorf("parse.DayTime: %w", IncorrectDayTimeFormat)
 		return
 	}
 	return store.NewDayTime(hours, minutes), nil
@@ -67,34 +70,34 @@ func DayTime(s string) (time store.DayTime, err error) {
 func ClubWorkingTime(s string) (openTime store.DayTime, closeTime store.DayTime, err error) {
 	parts := strings.Split(s, " ")
 	if len(parts) != 2 {
-		err = fmt.Errorf("ParseClubWorkingTime: %w", IncorrectClubWorkingTimeFormat)
+		err = fmt.Errorf("parse.ClubWorkingTime: %w", IncorrectClubWorkingTimeFormat)
 		return
 	}
 
 	openTime, err = DayTime(parts[0])
 	if err != nil {
-		err = fmt.Errorf("ParseClubWorkingTime: %w", err)
+		err = fmt.Errorf("parse.ClubWorkingTime: %w", err)
 		return
 
 	}
 	closeTime, err = DayTime(parts[1])
 	if err != nil {
-		err = fmt.Errorf("ParseClubWorkingTime: %w", err)
+		err = fmt.Errorf("parse.ClubWorkingTime: %w", err)
 		return
 	}
 
 	if openTime.Compare(closeTime.Time) == 1 {
-		err = fmt.Errorf("ParseClubWorkingTime: %w", OpenTimeIsAfterCloseTimeError)
+		err = fmt.Errorf("parse.ClubWorkingTime: %w", OpenTimeIsAfterCloseTimeError)
 		return
 	}
 
 	return
 }
 
-func ArriveEvent(s string) (e event.ArriveEvent, err error) {
+func ArriveEvent(s string) (e *event.ArriveEvent, err error) {
 	parts := strings.Split(s, " ")
 	if len(parts) != 3 {
-		err = fmt.Errorf("ParseArriveEvent: %w", IncorrectEventFormat)
+		err = fmt.Errorf("parse.ArriveEvent: %w", IncorrectEventFormat)
 		return
 	}
 
@@ -104,80 +107,81 @@ func ArriveEvent(s string) (e event.ArriveEvent, err error) {
 	}
 
 	if id != event.ArrivalEventId {
-		err = fmt.Errorf("ParseArriveEvent: cant parse id %w", IncorrectEventFormat)
+		err = fmt.Errorf("parse.ArriveEvent: cant parse id %w", IncorrectEventFormat)
 		return
 	}
 
-	return *event.NewArrivalEvent(t, client), nil
+	return event.NewArrivalEvent(t, client), nil
 }
 
-func SitDownEvent(s string) (e event.SitDownEvent, err error) {
+func SitDownEvent(s string) (e *event.SitDownEvent, err error) {
 	parts := strings.Split(s, " ")
 	if len(parts) != 4 {
-		err = fmt.Errorf("ParseSitDownEvent: %w", IncorrectEventFormat)
+		err = fmt.Errorf("parse.SitDownEvent: %w", IncorrectEventFormat)
 		return
 	}
 	t, id, client, err := inputEvent(s)
 	if err != nil {
-		err = fmt.Errorf("ParseSitDownEvent: %w", err)
+		err = fmt.Errorf("parse.SitDownEvent: %w", err)
 		return
 	}
 	if id != event.SitDownEventId {
-		err = fmt.Errorf("ParseSitDownEvent: incorrect id %w", IncorrectEventFormat)
+		err = fmt.Errorf("parse.SitDownEvent: incorrect id %w", IncorrectEventFormat)
 		return
 	}
 
 	tableNumber, err := positiveNumber(parts[3])
 	if err != nil {
-		err = fmt.Errorf("ParseSitDownEvent: cant parse table number %w", err)
+		err = fmt.Errorf("parse.SitDownEvent: cant parse table number %w", err)
 		return
 	}
 
-	return *event.NewSitDownEvent(t, client, tableNumber), nil
+	return event.NewSitDownEvent(t, client, tableNumber), nil
 }
 
-func WaitEvent(s string) (e event.WaitEvent, err error) {
+func WaitEvent(s string) (e *event.WaitEvent, err error) {
 	parts := strings.Split(s, " ")
 	if len(parts) != 3 {
-		err = fmt.Errorf("ParseWaitEvent: %w", IncorrectEventFormat)
+		err = fmt.Errorf("parse.WaitEvent: %w", IncorrectEventFormat)
 		return
 	}
 	t, id, client, err := inputEvent(s)
 	if err != nil {
-		err = fmt.Errorf("ParseWaitEvent: %w", err)
+		err = fmt.Errorf("parse.WaitEvent: %w", err)
 		return
 	}
 	if id != event.WaitEventId {
-		err = fmt.Errorf("ParseWaitEvent: incorrect id %w", IncorrectEventFormat)
+		err = fmt.Errorf("parse.WaitEvent: incorrect id %w", IncorrectEventFormat)
 		return
 	}
 
-	return *event.NewWaitEvent(t, client), nil
+	return event.NewWaitEvent(t, client), nil
 }
 
-func LeaveEvent(s string) (e event.LeaveEvent, err error) {
+func LeaveEvent(s string) (e *event.LeaveEvent, err error) {
 	parts := strings.Split(s, " ")
 	if len(parts) != 3 {
-		err = fmt.Errorf("ParseLeaveEvent: %w", IncorrectEventFormat)
+		err = fmt.Errorf("parse.LeaveEvent: %w", IncorrectEventFormat)
 		return
 	}
 	t, id, client, err := inputEvent(s)
 	if err != nil {
-		err = fmt.Errorf("ParseLeaveEvent: %w", err)
+		err = fmt.Errorf("parse.LeaveEvent: %w", err)
 		return
 	}
 	if id != event.LeaveEventId {
-		err = fmt.Errorf("ParseLeaveEvent: incorrect id %w", IncorrectEventFormat)
+		err = fmt.Errorf("parse.LeaveEvent: incorrect id %w", IncorrectEventFormat)
 		return
 	}
 
-	return *event.NewLeaveEvent(t, client), nil
+	return event.NewLeaveEvent(t, client), nil
 }
 
-func InputEvent(s string) (e event.Event, err error) {
+func InputEvent(s string) (e event.InputEvent, err error) {
+	s = strings.Trim(s, " ")
 	_, id, _, err := inputEvent(s)
 	if err != nil {
-		return event.EmptyEvent, err
+		return event.EmptyInputEvent, err
 	}
 
 	var errParse error
@@ -191,11 +195,11 @@ func InputEvent(s string) (e event.Event, err error) {
 	case event.LeaveEventId:
 		e, errParse = LeaveEvent(s)
 	default:
-		return event.EmptyEvent, IncorrectEventFormat
+		return event.EmptyInputEvent, IncorrectEventFormat
 	}
 
 	if errParse != nil {
-		return event.EmptyEvent, errParse
+		return event.EmptyInputEvent, errParse
 	}
 
 	return e, err
@@ -215,7 +219,7 @@ func positiveNumber(s string) (int, error) {
 }
 
 func clientName(s string) (string, error) {
-	match, _ := regexp.MatchString(`[a-z | 1-9 |\_|\-]+`, s)
+	match, _ := regexp.MatchString(`^[a-z | 1-9 |\_|\-]+$`, s)
 	if !match {
 		return "", IncorrectClientNameFormat
 	}

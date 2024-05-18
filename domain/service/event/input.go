@@ -1,6 +1,8 @@
 package event
 
 import (
+	"fmt"
+
 	"github.com/GerogeGol/yadro-test-problem/domain/store"
 )
 
@@ -17,6 +19,12 @@ type InputEvent interface {
 type inputEvent struct {
 	Event
 	client string
+}
+
+var EmptyInputEvent = &inputEvent{Event: EmptyEvent}
+
+func (e *inputEvent) String() string {
+	return fmt.Sprintf("%s %d %s", e.Time(), e.Id(), e.Client())
 }
 
 func newInputEvent(t store.DayTime, id int, client string) *inputEvent {
@@ -40,6 +48,10 @@ func NewArrivalEvent(t store.DayTime, client string) *ArriveEvent {
 	}
 }
 
+func (e *ArriveEvent) String() string {
+	return fmt.Sprintf("%s %d %s", e.Time(), e.Id(), e.Client())
+}
+
 type SitDownEvent struct {
 	InputEvent
 	table int
@@ -56,6 +68,10 @@ func (e *SitDownEvent) Table() int {
 	return e.table
 }
 
+func (e *SitDownEvent) String() string {
+	return fmt.Sprintf("%s %d %s %d", e.Time(), e.Id(), e.Client(), e.Table())
+}
+
 type WaitEvent struct {
 	InputEvent
 }
@@ -64,10 +80,18 @@ func NewWaitEvent(t store.DayTime, client string) *WaitEvent {
 	return &WaitEvent{InputEvent: newInputEvent(t, WaitEventId, client)}
 }
 
+func (e *WaitEvent) String() string {
+	return fmt.Sprintf("%s %d %s", e.Time(), e.Id(), e.Client())
+}
+
 type LeaveEvent struct {
 	InputEvent
 }
 
 func NewLeaveEvent(t store.DayTime, client string) *LeaveEvent {
 	return &LeaveEvent{InputEvent: newInputEvent(t, LeaveEventId, client)}
+}
+
+func (e *LeaveEvent) String() string {
+	return fmt.Sprintf("%s %d %s", e.Time(), e.Id(), e.Client())
 }

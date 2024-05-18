@@ -17,6 +17,6 @@ func (c *Client) PlayingTime(t DayTime) time.Duration {
 
 func (c *Client) Payment(t DayTime, moneyPerHour float64) float64 {
 	playingTime := c.PlayingTime(t)
-	playedHours := math.Round(playingTime.Hours())
+	playedHours := math.Ceil(playingTime.Hours())
 	return float64(playedHours) * moneyPerHour
 }

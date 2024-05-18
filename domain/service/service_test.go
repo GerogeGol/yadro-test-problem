@@ -51,13 +51,7 @@ func TestSitDownEvent(t *testing.T) {
 		sitDownEvent := event.NewSitDownEvent(dummyDayTime, dummyClient, dummyTableNumber)
 		gotEvent = s.ServeEvent(sitDownEvent)
 		assertNoErrorEvent(t, gotEvent)
-
-		outSitDownEvent, ok := gotEvent.(*event.OutSitDownEvent)
-		test.AssertTrue(t, ok)
-		test.AssertEqual(t, gotEvent.Id(), event.OutSitDownEventId)
-		test.AssertEqual(t, outSitDownEvent.Table(), dummyTableNumber)
-		test.AssertEqual(t, outSitDownEvent.Client(), dummyClient)
-
+		assertEmptyEvent(t, gotEvent)
 	})
 	t.Run("client arrives, sits down and changes sit", func(t *testing.T) {
 		s := service.NewService(service.NewComputerClub(2, dummyMoneyPerHour, dummyOpenTime, dummyCloseTime, memstore.NewStore(), memqueue.NewQueue()))
@@ -73,12 +67,7 @@ func TestSitDownEvent(t *testing.T) {
 		sitDownEvent = event.NewSitDownEvent(dummyDayTime, dummyClient, 2)
 		gotEvent = s.ServeEvent(sitDownEvent)
 		assertNoErrorEvent(t, gotEvent)
-
-		outSitDownEvent, ok := gotEvent.(*event.OutSitDownEvent)
-		test.AssertTrue(t, ok)
-		test.AssertEqual(t, outSitDownEvent.Table(), 2)
-		test.AssertEqual(t, outSitDownEvent.Client(), dummyClient)
-
+		assertEmptyEvent(t, gotEvent)
 	})
 
 	t.Run("client arrives, sits down to busy table", func(t *testing.T) {

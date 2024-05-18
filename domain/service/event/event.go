@@ -1,6 +1,8 @@
 package event
 
-import "github.com/GerogeGol/yadro-test-problem/domain/store"
+import (
+	"github.com/GerogeGol/yadro-test-problem/domain/store"
+)
 
 type Event interface {
 	Time() store.DayTime

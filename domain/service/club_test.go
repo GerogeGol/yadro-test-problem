@@ -170,6 +170,12 @@ func TestWait(t *testing.T) {
 		test.AssertNoError(t, err)
 		test.AssertFalse(t, isWaiting)
 	})
+	t.Run("client no wating for an empty table", func(t *testing.T) {
+		club := service.NewComputerClub(1, dummyMoneyPerHour, dummyOpenTime, dummyCloseTime, memstore.NewStore(), memqueue.NewQueue())
+
+		_, err := club.Wait(dummyDayTime, dummyClient)
+		test.AssertNotNilError(t, err)
+	})
 }
 
 func TestLeave(t *testing.T) {
